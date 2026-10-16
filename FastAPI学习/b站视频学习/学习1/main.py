@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Path, Query
 from typing import Annotated
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 app = FastAPI()
@@ -46,7 +46,7 @@ async def user3_get(
 class User(BaseModel):
     id: int
     user_name: str
-    password: str
+    password: str = Field(..., min_length=2, max_length=20, description="账户密码，最低长度为2，最大为20")
 
 @app.post("/register")
 async def register(user: User):
