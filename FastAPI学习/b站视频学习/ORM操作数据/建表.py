@@ -1,9 +1,9 @@
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-
+from typing import Annotated
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Path
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Float, String, func, select
 from sqlalchemy.ext.asyncio import (
@@ -110,7 +110,15 @@ async def get_books(db: AsyncSession = Depends(get_database)):
     book = await db.get(Book, 1)
     return book
 
-@app.get("/book/{book_id}")
+
+@app.get("/book/{book_id}", response_model=BookOut)
 async def get_particular_book(book_id: int, db: AsyncSession = Depends(get_database)):
     book = await db.execute(select(Book).where(Book.id == book_id))
     return book.scalar_one_or_none()
+
+
+# 查询价格大于某个数值的所有物品
+@app.get("/book/search_book/{designated_price}", response_model=list[BookOut])
+async def get_search_book(designated_price: Annotated[int|float, Path(..., gt=0, le=5000)], db: AsyncSession = Depends(get_database)):
+    result = await db.execute(select(Book).where(Book.price>=designated_price))
+    return result.scalars().all()
