@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Annotated
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, Path
+from fastapi import FastAPI, Depends, Path, Query, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Float, String, func, select
 from sqlalchemy.ext.asyncio import (
@@ -102,23 +102,44 @@ async def root():
     return {"message": "Hello World"}
 
 
-@app.get("/book/books", response_model=list[BookOut])
+@app.get("/book/books", response_model=BookOut)
 async def get_books(db: AsyncSession = Depends(get_database)):
     # result = await db.execute(select(Book))
     # return result.scalars().all()  获取所有数据
     # return result.scalars().first()     # 获取第一条数据
     book = await db.get(Book, 1)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
     return book
+
+
+# 模糊查询
+@app.get("/book/search", response_model=list[BookOut])
+async def select_book_by_publisher(
+    publisher: str | None = Query(default=None, description="出版社模糊检索，包含该文字"),
+    db: AsyncSession = Depends(get_database)
+):
+    stmt = select(Book)
+    if publisher:
+        # 包含匹配 %xxx%
+        stmt = stmt.where(Book.publisher.like(func.concat("%", publisher, "%")))
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 @app.get("/book/{book_id}", response_model=BookOut)
 async def get_particular_book(book_id: int, db: AsyncSession = Depends(get_database)):
-    book = await db.execute(select(Book).where(Book.id == book_id))
-    return book.scalar_one_or_none()
+    book = (await db.execute(select(Book).where(Book.id == book_id))).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return book
 
 
 # 查询价格大于某个数值的所有物品
 @app.get("/book/search_book/{designated_price}", response_model=list[BookOut])
-async def get_search_book(designated_price: Annotated[int|float, Path(..., gt=0, le=5000)], db: AsyncSession = Depends(get_database)):
+async def get_search_book(
+    designated_price: Annotated[float, Path(..., gt=0, le=5000)],
+    db: AsyncSession = Depends(get_database)
+):
     result = await db.execute(select(Book).where(Book.price>=designated_price))
     return result.scalars().all()
