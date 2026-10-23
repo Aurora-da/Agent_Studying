@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path, Query, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import DateTime, Float, String, func, select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -35,10 +35,17 @@ class Base(DeclarativeBase):
 
 class TimestampMixin:
     create_time: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), comment="创建时间"
+        DateTime,
+        default=datetime.now,
+        server_default=func.now(),
+        comment="创建时间"
     )
     update_time: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now(), comment="修改时间"
+        DateTime,
+        default=datetime.now,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="修改时间"
     )
 
 
@@ -61,6 +68,13 @@ class BookOut(BaseModel):
     publisher: str
     create_time: datetime
     update_time: datetime
+
+
+# ---------- pydantic 模型基类 -------------
+class BaseBook(BaseModel):
+    bookname: Annotated[str, Field(min_length=1, max_length=30, description="书本的名称")]
+    price: Annotated[float | int, Field(gt=0, le=10000, description="书本的价格")]
+    publisher: Annotated[str, Field(min_length=1, max_length=20, description="出版社")]
 
 
 # ---------- 会话 & 依赖 ----------
@@ -127,6 +141,49 @@ async def select_book_by_publisher(
     return result.scalars().all()
 
 
+# 聚合查询
+@app.get("/book/count", response_model=int)
+async def get_book_count(db: AsyncSession = Depends(get_database)):
+    stmt = select(func.count(Book.id))
+    result = await db.execute(stmt)
+    book_num = result.scalar_one_or_none()
+    return book_num
+
+
+# 返回指定页码的数据
+@app.get("/book/get_book_list", response_model=list[BookOut])
+async def get_book_list(
+    page: Annotated[int, Query()] = 1,
+    page_size: Annotated[int, Query()] = 2,
+    db: AsyncSession = Depends(get_database),
+):
+    skip = (page-1)*page_size
+    # offset：跳过的记录数， limit：每页的记录数
+    stmt = select(Book).offset(skip).limit(page_size)
+    result = await db.execute(stmt)
+    books = result.scalars().all()
+    return books
+
+
+# 新增书籍 接口的输入数据模型
+class BookBase(BaseBook):
+    pass
+
+
+# 新增数据到数据库
+@app.post("/book/add_book", response_model=BookOut)
+async def add_book(
+    book: BookBase,
+    db: AsyncSession = Depends(get_database),
+):
+    # 转换成 ORM 对象
+    book_obj = Book(**book.model_dump())
+    db.add(book_obj)
+    await db.commit()
+    await db.refresh(book_obj)
+    return book_obj
+
+
 @app.get("/book/{book_id}", response_model=BookOut)
 async def get_particular_book(book_id: int, db: AsyncSession = Depends(get_database)):
     book = (await db.execute(select(Book).where(Book.id == book_id))).scalar_one_or_none()
@@ -143,3 +200,47 @@ async def get_search_book(
 ):
     result = await db.execute(select(Book).where(Book.price>=designated_price))
     return result.scalars().all()
+
+
+# ---------------- 更新图书信息 -------------------
+# 更新图书模型
+class BookUpdate(BaseBook):
+    pass
+
+
+# 更新图书信息
+@app.put("/book/update_book/{book_id}")
+async def update_book(
+    book_id: int,
+    data: BookUpdate,
+    db: AsyncSession = Depends(get_database),
+):
+    db_book = await db.get(Book, book_id)
+    if db_book is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Book not found"
+        )
+
+    db_book.bookname = data.bookname
+    db_book.price = data.price
+    db_book.publisher = data.publisher
+    await db.commit()
+    await db.refresh(db_book)
+    return db_book
+
+
+# 删除图书信息
+@app.delete("/book/delete/{book_id}")
+async def delete_book(
+    book_id: int,
+    db: AsyncSession = Depends(get_database),
+):
+    db_book = await db.get(Book, book_id)
+
+    if db_book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    await db.delete(db_book)
+    await db.commit()
+    return {"message": "图书删除成功"}
