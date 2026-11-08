@@ -12,7 +12,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 load_dotenv()
 
 # ——————————————————————— 准备知识库 ————————————————————————————————
-PERSIST_DIR = "./RAG_Agent学习"
+PERSIST_DIR = "RAG_Agent学习"
 
 # 加载文本文件
 loader = TextLoader("knowledge.txt", encoding="utf-8")

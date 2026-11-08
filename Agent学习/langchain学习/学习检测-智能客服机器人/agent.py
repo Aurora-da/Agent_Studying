@@ -19,7 +19,7 @@ load_dotenv()
 
 
 # ———————————————————————————— 准备知识库 ————————————————————————————
-PERSIST_DIR = "./智能客服助手"
+PERSIST_DIR = "智能客服助手"
 
 # 加载数据文件
 loader = TextLoader("information.txt", encoding="utf-8")

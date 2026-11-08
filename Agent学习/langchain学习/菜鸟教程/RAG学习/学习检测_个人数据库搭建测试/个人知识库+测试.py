@@ -160,7 +160,7 @@ def create_kb_agent(kb: KnowledgeBase):
 # ———————————————————————————————— 开始测试 ————————————————————————————————————、
 if __name__ == "__main__":
     # 创建向量数据库
-    kb = KnowledgeBase("./商品信息")
+    kb = KnowledgeBase("商品信息")
     kb.add_file("information.txt")
 
     # 创建带依赖注入的智能体
